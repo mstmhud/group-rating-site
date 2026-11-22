@@ -20,7 +20,7 @@ const db = require('./db');
 
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const INVITE_CODE = (process.env.INVITE_CODE || '').trim();
+const INVITE_CODE = (process.env.INVITE_CODE || 'mostm2026').trim();   // 注册邀请码（可用环境变量覆盖）
 
 /* ---------- 内存状态 ---------- */
 let state = null;
