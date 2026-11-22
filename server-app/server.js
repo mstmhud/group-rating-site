@@ -84,17 +84,28 @@ function actorOf(session) {
   return { user: session ? session.user : null, admin: session ? session.admin : false };
 }
 
-/* ---------- 限流（只限 API；静态资源与页面不限） ---------- */
-const hits = new Map();
+/* ---------- 限流与自动封禁（防刷/防应用层攻击） ---------- */
+const hits = new Map();     // 每 IP 请求计数（10 秒滑动窗口）
+const banned = new Map();   // 超频 IP 临时封禁表（到期自动解封）
 function rateLimited(req, pathname) {
-  if (pathname.indexOf('/api/') !== 0) return false;   // 静态资源不限流
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   const now = Date.now();
+  const b = banned.get(ip);
+  if (b) {
+    if (now < b) return true;
+    banned.delete(ip);            // 封禁到期，自动解封
+  }
   let h = hits.get(ip);
   if (!h || now > h.reset) { h = { count: 0, reset: now + 10000 }; hits.set(ip, h); }
   h.count++;
-  if (hits.size > 5000) hits.clear();
-  return h.count > 240;   // 10 秒 240 次 API 请求（群内使用远达不到）
+  if (hits.size > 8000) hits.clear();
+  if (h.count > 240) {            // 10 秒内超过 240 次：封禁 10 分钟（正常使用远达不到）
+    banned.set(ip, now + 600000);
+    hits.delete(ip);
+    console.log('[防攻击] IP 超频，临时封禁 10 分钟:', ip);
+    return true;
+  }
+  return false;
 }
 
 /* ---------- HTTP 辅助 ---------- */
