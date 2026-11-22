@@ -33,12 +33,17 @@
   function adoptState(s) {
     api.__adoptState(s);
   }
+  /* 采用服务端状态；返回 true 表示状态真的变了（需要重渲染） */
   function adopt(res) {
     if (res && typeof res.version === 'number') serverVersion = res.version;
-    if (res && res.state) adoptState(res.state);
+    if (!res || !res.state) return false;
+    var same = JSON.stringify(res.state) === JSON.stringify(api.getState());
+    if (!same) adoptState(res.state);
+    return !same;
   }
-  function renderIfIdle() {
-    // 打字中 / 有弹窗时不打断
+  function renderIfIdle(changed) {
+    // 打字中 / 有弹窗时不打断；状态无变化时也不渲染（避免自身操作触发循环）
+    if (changed === false) return;
     var a = document.activeElement;
     if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return;
     if (document.querySelector('.modal') || document.querySelector('.lightbox')) return;
@@ -60,14 +65,13 @@
     pendingOps++;
     return req('POST', '/api/op', { op: op, args: args }).then(function (res) {
       pendingOps--;
-      adopt(res);
-      renderIfIdle();
+      var changed = adopt(res);
+      renderIfIdle(changed);
       return res;
     }).catch(function (e) {
       pendingOps--;
       // 服务端拒绝（禁言/规则/权限）：回滚为服务端权威状态
-      if (e.data && e.data.state) adopt(e.data);
-      renderIfIdle();
+      if (e.data && e.data.state) { adopt(e.data); renderIfIdle(true); }
       if (window.UI && UI.toast) UI.toast(e.message || '操作被拒绝', 'err');
       throw e;
     });
@@ -192,8 +196,8 @@
         if (typeof res.version !== 'number') return;
         if (res.version === serverVersion || pendingOps > 0) return;
         return req('GET', '/api/state').then(function (res2) {
-          adopt(res2);
-          renderIfIdle();
+          var changed = adopt(res2);
+          renderIfIdle(changed);
         });
       }).catch(function () { });
     }, 4000);

@@ -84,16 +84,17 @@ function actorOf(session) {
   return { user: session ? session.user : null, admin: session ? session.admin : false };
 }
 
-/* ---------- 限流 ---------- */
+/* ---------- 限流（只限 API；静态资源与页面不限） ---------- */
 const hits = new Map();
-function rateLimited(req) {
+function rateLimited(req, pathname) {
+  if (pathname.indexOf('/api/') !== 0) return false;   // 静态资源不限流
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   const now = Date.now();
   let h = hits.get(ip);
   if (!h || now > h.reset) { h = { count: 0, reset: now + 10000 }; hits.set(ip, h); }
   h.count++;
   if (hits.size > 5000) hits.clear();
-  return h.count > 40;
+  return h.count > 240;   // 10 秒 240 次 API 请求（群内使用远达不到）
 }
 
 /* ---------- HTTP 辅助 ---------- */
@@ -276,7 +277,7 @@ async function requestHandler(req, res) {
 
   if (!ready) { send(res, 503, { error: '启动中' }); return; }
   if (pathname.startsWith('/api/')) {
-    if (rateLimited(req)) { send(res, 429, { error: '请求太频繁，稍后再试' }); return; }
+    if (rateLimited(req, pathname)) { send(res, 429, { error: '请求太频繁，稍后再试' }); return; }
     try {
       await handleApi(req, res, pathname, secure);
     } catch (e) {
@@ -285,7 +286,7 @@ async function requestHandler(req, res) {
     }
     return;
   }
-  if (rateLimited(req)) { send(res, 429, { error: '请求太频繁' }); return; }
+  if (rateLimited(req, pathname)) { send(res, 429, { error: '请求太频繁' }); return; }
   serveStatic(req, res, pathname);
 }
 
