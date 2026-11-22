@@ -1,0 +1,12 @@
+# 运行时产生的数据/临时文件，一律不入库
+state.json
+data/
+*.log
+
+# 系统杂物
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 依赖（本项目零依赖，防患于未然）
+node_modules/
